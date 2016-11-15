@@ -34,7 +34,7 @@ RCT_EXPORT_MODULE();
     self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.session];
     self.previewLayer.needsDisplayOnBoundsChange = YES;
   #endif
-  
+
   if(!self.camera){
     self.camera = [[RCTCamera alloc] initWithManager:self bridge:self.bridge];
   }
@@ -289,6 +289,13 @@ RCT_CUSTOM_VIEW_PROPERTY(captureAudio, BOOL, RCTCamera) {
     self.sensorOrientationChecker = [RCTSensorOrientationChecker new];
   }
   return self;
+}
+
+RCT_EXPORT_METHOD(requestVideoAuthorization:(RCTPromiseResolveBlock)resolve
+                  reject:(__unused RCTPromiseRejectBlock)reject) {
+  [AVCaptureDevice requestAccessForMediaType:AVMediaTypeVideo completionHandler:^(BOOL granted) {
+    resolve(@(granted));
+  }];
 }
 
 RCT_EXPORT_METHOD(checkDeviceAuthorizationStatus:(RCTPromiseResolveBlock)resolve
