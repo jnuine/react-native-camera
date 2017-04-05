@@ -5,7 +5,11 @@
 package com.lwansbrough.RCTCamera;
 
 import android.content.Context;
+import android.graphics.Point;
+import android.graphics.Rect;
+import android.hardware.Camera;
 import android.hardware.SensorManager;
+import android.view.Display;
 import android.view.OrientationEventListener;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -117,6 +121,10 @@ public class RCTCameraView extends ViewGroup {
 
     public void setBarcodeScannerEnabled(boolean barcodeScannerEnabled) {
         RCTCamera.getInstance().setBarcodeScannerEnabled(barcodeScannerEnabled);
+    }
+
+    public void setBarcodeScannerBounds (Rect barcodeScannerBounds) {
+        RCTCamera.getInstance().setBarcodeScannerBounds(barcodeScannerBounds);
     }
 
     public void setBarCodeTypes(List<String> types) {

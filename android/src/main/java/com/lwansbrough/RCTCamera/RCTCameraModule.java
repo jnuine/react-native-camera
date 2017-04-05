@@ -6,6 +6,9 @@
 package com.lwansbrough.RCTCamera;
 
 import android.content.ContentValues;
+import android.content.Context;
+import android.graphics.Point;
+import android.graphics.Rect;
 import android.hardware.Camera;
 import android.media.*;
 import android.net.Uri;
@@ -14,7 +17,9 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
+import android.view.Display;
 import android.view.Surface;
+import android.view.WindowManager;
 
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.Promise;

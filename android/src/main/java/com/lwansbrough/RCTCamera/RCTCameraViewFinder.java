@@ -5,21 +5,21 @@
 package com.lwansbrough.RCTCamera;
 
 import android.content.Context;
+import android.graphics.Point;
+import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
+import android.os.AsyncTask;
+import android.util.DisplayMetrics;
+import android.view.Display;
 import android.view.MotionEvent;
 import android.view.TextureView;
-import android.os.AsyncTask;
+import android.view.WindowManager;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
-
-import java.util.List;
-import java.util.EnumMap;
-import java.util.EnumSet;
-
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.DecodeHintType;
@@ -27,6 +27,12 @@ import com.google.zxing.MultiFormatReader;
 import com.google.zxing.PlanarYUVLuminanceSource;
 import com.google.zxing.Result;
 import com.google.zxing.common.HybridBinarizer;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.List;
 
 class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceTextureListener, Camera.PreviewCallback {
     private int _cameraType;
@@ -36,16 +42,36 @@ class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceText
     private boolean _isStopping;
     private Camera _camera;
     private float mFingerSpacing;
+    private final Context _context;
 
     // concurrency lock for barcode scanner to avoid flooding the runtime
     public static volatile boolean barcodeScannerTaskLock = false;
 
     // reader instance for the barcode scanner
     private final MultiFormatReader _multiFormatReader = new MultiFormatReader();
+    private boolean _imageOrientationShouldBeFixed = true;
+    private static final ArrayList<BarcodeFormat> _formatsSensitiveToOrientation = new ArrayList<>(
+      Arrays.asList(
+            BarcodeFormat.EAN_13,
+            BarcodeFormat.EAN_8,
+            BarcodeFormat.PDF_417,
+            BarcodeFormat.UPC_E,
+            BarcodeFormat.CODE_39,
+            BarcodeFormat.CODE_93,
+            BarcodeFormat.ITF,
+            BarcodeFormat.CODABAR,
+            BarcodeFormat.CODE_128,
+            BarcodeFormat.RSS_14,
+            BarcodeFormat.RSS_EXPANDED,
+            BarcodeFormat.UPC_A,
+            BarcodeFormat.UPC_EAN_EXTENSION
+      )
+    );
 
     public RCTCameraViewFinder(Context context, int type) {
         super(context);
         this.setSurfaceTextureListener(this);
+        this._context = context;
         this._cameraType = type;
         this.initBarcodeReader(RCTCamera.getInstance().getBarCodeTypes());
     }
@@ -239,10 +265,14 @@ class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceText
         EnumMap<DecodeHintType, Object> hints = new EnumMap<>(DecodeHintType.class);
         EnumSet<BarcodeFormat> decodeFormats = EnumSet.noneOf(BarcodeFormat.class);
 
+        _imageOrientationShouldBeFixed = false;
         if (barCodeTypes != null) {
             for (String code : barCodeTypes) {
                 BarcodeFormat format = parseBarCodeString(code);
                 if (format != null) {
+                    if (!_imageOrientationShouldBeFixed && _formatsSensitiveToOrientation.contains(format)) {
+                        _imageOrientationShouldBeFixed = true;
+                    }
                     decodeFormats.add(format);
                 }
             }
@@ -262,17 +292,43 @@ class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceText
     public void onPreviewFrame(byte[] data, Camera camera) {
         if (RCTCamera.getInstance().isBarcodeScannerEnabled() && !RCTCameraViewFinder.barcodeScannerTaskLock) {
             RCTCameraViewFinder.barcodeScannerTaskLock = true;
-            new ReaderAsyncTask(camera, data).execute();
+            new ReaderAsyncTask(camera, data, RCTCamera.getInstance().getBarcodeScannerBounds()).execute();
         }
     }
 
     private class ReaderAsyncTask extends AsyncTask<Void, Void, Void> {
         private byte[] imageData;
         private final Camera camera;
+        private Rect bounds;
 
-        ReaderAsyncTask(Camera camera, byte[] imageData) {
+        ReaderAsyncTask(Camera camera, byte[] imageData, Rect barcodeScannerBounds) {
             this.camera = camera;
             this.imageData = imageData;
+            this.bounds = barcodeScannerBounds;
+        }
+
+        public Rect getDPRectInPixels (Rect rectInDp) {
+            DisplayMetrics dm = getContext().getResources().getDisplayMetrics();
+            float density = dm.density;
+            Rect rect = new Rect(rectInDp);
+            rect.left = Math.round(rect.left * density);
+            rect.right = Math.round(rect.right * density);
+            rect.top = Math.round(rect.top * density);
+            rect.bottom = Math.round(rect.bottom * density);
+            return rect;
+        }
+
+        public Rect getRectInPreviewResolution (int previewWidth, int previewHeight, Rect rectInScreenResolution) {
+            WindowManager wm = (WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE);
+            Display display = wm.getDefaultDisplay();
+            Point screenSize = new Point();
+            display.getSize(screenSize);
+            Rect rect = new Rect(rectInScreenResolution);
+            rect.left = rect.left * previewWidth / screenSize.x;
+            rect.right = rect.right * previewWidth / screenSize.x;
+            rect.top = rect.top * previewHeight / screenSize.y;
+            rect.bottom = rect.bottom * previewHeight / screenSize.y;
+            return rect;
         }
 
         @Override
@@ -285,22 +341,53 @@ class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceText
 
             int width = size.width;
             int height = size.height;
+            if (bounds == null) {
+                bounds = new Rect(0, 0, width, height);
+            }
 
+            Rect scannerBounds = this.getDPRectInPixels(bounds);
             // rotate for zxing if orientation is portrait
             if (RCTCamera.getInstance().getActualDeviceOrientation() == 0) {
-              byte[] rotated = new byte[imageData.length];
-              for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                  rotated[x * height + height - y - 1] = imageData[x + y * width];
+                if (_imageOrientationShouldBeFixed) {
+                    byte[] rotated = new byte[imageData.length];
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            rotated[x * height + height - y - 1] = imageData[x + y * width];
+                        }
+                    }
+                    width = size.height;
+                    height = size.width;
+                    imageData = rotated;
+                    scannerBounds = this.getRectInPreviewResolution(width, height, scannerBounds);
                 }
-              }
-              width = size.height;
-              height = size.width;
-              imageData = rotated;
+                else {
+                    // Rotate bounds, it's a lot cheaper than rotating the whole previewFrame
+                    // First, calculate the bounds in the preview referential with width and height
+                    // inverted (we rely on device width and height which are not inverted)
+                    scannerBounds = this.getRectInPreviewResolution(height, width, scannerBounds);
+                    // Now, actually rotate the bounds
+                    Rect boundsCopy = new Rect(scannerBounds);
+                    scannerBounds.left = boundsCopy.top;
+                    scannerBounds.right = boundsCopy.bottom;
+                    scannerBounds.top = boundsCopy.left;
+                    scannerBounds.bottom = boundsCopy.right;
+                }
+            }
+            else {
+              scannerBounds = this.getRectInPreviewResolution(width, height, scannerBounds);
             }
 
             try {
-                PlanarYUVLuminanceSource source = new PlanarYUVLuminanceSource(imageData, width, height, 0, 0, width, height, false);
+                PlanarYUVLuminanceSource source = new PlanarYUVLuminanceSource(
+                        imageData,
+                        width,
+                        height,
+                        scannerBounds.left,
+                        scannerBounds.top,
+                        scannerBounds.width(),
+                        scannerBounds.height(),
+                        false
+                );
                 BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
                 Result result = _multiFormatReader.decodeWithState(bitmap);
 
@@ -309,7 +396,6 @@ class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceText
                 event.putString("data", result.getText());
                 event.putString("type", result.getBarcodeFormat().toString());
                 reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("CameraBarCodeReadAndroid", event);
-
             } catch (Throwable t) {
                 // meh
             } finally {

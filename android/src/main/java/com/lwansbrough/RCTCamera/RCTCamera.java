@@ -4,6 +4,7 @@
 
 package com.lwansbrough.RCTCamera;
 
+import android.graphics.Rect;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
 import android.util.Log;
@@ -22,6 +23,7 @@ public class RCTCamera {
     private static final Resolution RESOLUTION_720P = new Resolution(1280, 720);
     private static final Resolution RESOLUTION_1080P = new Resolution(1920, 1080);
     private boolean _barcodeScannerEnabled = false;
+    private Rect _barcodeScannerBounds = null;
     private List<String> _barCodeTypes = null;
     private int _orientation = -1;
     private int _actualDeviceOrientation = 0;
@@ -160,12 +162,20 @@ public class RCTCamera {
         adjustPreviewLayout(RCTCameraModule.RCT_CAMERA_TYPE_BACK);
     }
 
+
+
     public boolean isBarcodeScannerEnabled() {
       return _barcodeScannerEnabled;
     }
 
     public void setBarcodeScannerEnabled(boolean barcodeScannerEnabled) {
         _barcodeScannerEnabled = barcodeScannerEnabled;
+    }
+
+    public Rect getBarcodeScannerBounds () { return _barcodeScannerBounds; }
+
+    public void setBarcodeScannerBounds (Rect barcodeScannerBounds) {
+        _barcodeScannerBounds= barcodeScannerBounds;
     }
 
     public List<String> getBarCodeTypes() {

@@ -1,8 +1,10 @@
 package com.lwansbrough.RCTCamera;
 
+import android.graphics.Rect;
 import android.support.annotation.Nullable;
 
 import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.uimanager.*;
 import com.facebook.react.uimanager.annotations.ReactProp;
 
@@ -73,6 +75,16 @@ public class RCTCameraViewManager extends ViewGroupManager<RCTCameraView> {
     @ReactProp(name = "barcodeScannerEnabled")
     public void setBarcodeScannerEnabled(RCTCameraView view, boolean barcodeScannerEnabled) {
         view.setBarcodeScannerEnabled(barcodeScannerEnabled);
+    }
+
+    @ReactProp(name = "barcodeScannerBounds")
+    public void setBarcodeScannerBounds(RCTCameraView view, ReadableMap barcodeScannerBounds) {
+        int left = barcodeScannerBounds.getInt("left");
+        int top = barcodeScannerBounds.getInt("top");
+        int right = left + barcodeScannerBounds.getInt("width");
+        int bottom = top + barcodeScannerBounds.getInt("height");
+        Rect bounds = new Rect(left, top, right, bottom);
+        view.setBarcodeScannerBounds(bounds);
     }
 
     @ReactProp(name = "barCodeTypes")
